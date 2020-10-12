@@ -1,0 +1,26 @@
+{
+    "name": "@devlearning/jwt-auth",
+    "version": "1.0.2",
+    "peerDependencies": {
+        "@angular/common": "^10.1.5",
+        "@angular/core": "^10.1.5",
+        "rxjs": "6.6.3",
+        "moment": "^2.29.1"
+    },
+    "dependencies": {
+        "tslib": "^2.0.0"
+    },
+    "description": "Jwt Angular Authentication manager with Refresh Token management.",
+    "author": "Luca Evaroni",
+    "license": "MIT",
+    "bugs": {
+        "url": "https://github.com/DeVLearninGRepo/jwt-auth/issues"
+    },
+    "homepage": "https://github.com/DeVLearninGRepo/jwt-auth",
+    "keywords": [
+        "JWT Token",
+        "JWT Authentication",
+        "Refresh token",
+        "Bearer Token"
+    ]
+}
