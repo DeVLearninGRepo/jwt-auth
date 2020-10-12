@@ -1,27 +1,80 @@
-# AngularLibraries
+# JwtAuth
 
-This project was generated with [Angular CLI](https://github.com/angular/angular-cli) version 10.1.6.
+Jwt Angular Authentication manager with Refresh Token management.
 
-## Development server
+## Installation 
 
-Run `ng serve` for a dev server. Navigate to `http://localhost:4200/`. The app will automatically reload if you change any of the source files.
+```bash
+npm i @devlearning/jwt-auth
+```
 
-## Code scaffolding
+## Configuration 
 
-Run `ng generate component component-name` to generate a new component. You can also use `ng generate directive|pipe|service|class|guard|interface|enum|module`.
+add to app.module this import:
 
-## Build
+```js
+    JwtAuthModule.forRoot({
+        tokenUrl: environment.jwtAuthToken,
+        refreshUrl: environment.jwtAuthRefreshToken,
+    })
+```
 
-Run `ng build` to build the project. The build artifacts will be stored in the `dist/` directory. Use the `--prod` flag for a production build.
+jwtAuthToken is the url to otain bearer token. Server response must the same of this class:
 
-## Running unit tests
+```js
+export class JwtToken {
+    username: string;
+    email: string;
+    token: string;                          //MANDATORY
+    expires: moment.Moment;                 //MANDATORY
+    refreshToken: string;                   //MANDATORY
+    refreshTokenExpiration: moment.Moment;  //MANDATORY
+}
+```
 
-Run `ng test` to execute the unit tests via [Karma](https://karma-runner.github.io).
+jwtAuthRefreshToken is the url to refresh the bearer token. Server response must the same of previous class.
 
-## Running end-to-end tests
 
-Run `ng e2e` to execute the end-to-end tests via [Protractor](http://www.protractortest.org/).
+## Usage
 
-## Further help
+to make a login call method "token" of service "JwtAuthService"
 
-To get more help on the Angular CLI use `ng help` or go check out the [Angular CLI README](https://github.com/angular/angular-cli/blob/master/README.md).
+```js
+this._jwtAuth.token({username: 'username', password: 'password'})   //return an observable
+```
+
+In JwtAuthService is available two Observable for monitoring loggedin status:
+    - isLoggedIn$
+    - jwtToken$
+or property with current value
+    - isLoggedIn
+    - jwtToken
+
+
+to use the JwtAuthGuard in canActivate route parameter:
+    - create auth.guard.ts
+    - extends JwtAuthguard class 
+    - call method canActivate of base class
+
+```js
+import { Injectable } from '@angular/core';
+import { Router, CanActivate, ActivatedRouteSnapshot, RouterStateSnapshot } from '@angular/router';
+import { JwtAuthGuard, JwtAuthService } from '@devlearning/jwt-auth';
+import { Observable } from 'rxjs';
+
+
+@Injectable()
+export class AuthGuard extends JwtAuthGuard implements CanActivate {
+
+    constructor(
+        private readonly _router: Router,
+        private readonly _jwtAuth: JwtAuthService
+    ) { 
+        super(_jwtAuth);
+    }
+
+    canActivate(route: ActivatedRouteSnapshot, state: RouterStateSnapshot): Observable<boolean> {
+        return this.canActivateBase();
+    }
+}
+```

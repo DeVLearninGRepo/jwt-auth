@@ -21,6 +21,7 @@ add to app.module this import:
 
 jwtAuthToken is the url to otain bearer token. Server response must the same of this class:
 
+```js
 export class JwtToken {
     username: string;
     email: string;
@@ -29,6 +30,7 @@ export class JwtToken {
     refreshToken: string;                   //MANDATORY
     refreshTokenExpiration: moment.Moment;  //MANDATORY
 }
+```
 
 jwtAuthRefreshToken is the url to refresh the bearer token. Server response must the same of previous class.
 
