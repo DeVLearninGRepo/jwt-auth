@@ -49,16 +49,12 @@ export class JwtAuthService {
     private http: HttpClient,
     //private authStorage: AuthStorageService
   ) {
-    console.debug("JwtAuthService ctor");
-
     this._isLoggedInSubject = new BehaviorSubject<boolean>(false);
     this._jwtTokenSubject = new BehaviorSubject<JwtToken>(null);
     this._refreshTokenSubject = new BehaviorSubject<JwtToken>(null);
     this._isRefreshingToken = false;
     this._isLocalStorageSupported = this._checkLocalStorageIsSupported();
     this._getLocalStorageSupported();
-
-    //this._init();
   }
 
   public token(request: TokenRequest): Observable<JwtToken> {
@@ -80,7 +76,6 @@ export class JwtAuthService {
       }),
       map(x => x),
       catchError(err => {
-        console.error(err);
         this._cleanToken();
         throw err;
       })
@@ -112,7 +107,6 @@ export class JwtAuthService {
             this._refreshTokenSubject.next(x);
           }),
           catchError(err => {
-            console.error(err);
             this._cleanToken();
             throw err;
           })
@@ -162,18 +156,13 @@ export class JwtAuthService {
         try {
           await this.refreshToken().toPromise();
         } catch (error) {
-          console.error(error);
+          
           this.logout();
         }
       }
     } else {
       this.logout();
     }
-  }
-
-  private handleErrorPromise(error: Response | any) {
-    console.error(error.message || error);
-    return Promise.reject(error.message || error);
   }
 
   private _checkLocalStorageIsSupported() {
@@ -188,7 +177,7 @@ export class JwtAuthService {
 
   private _getLocalStorageSupported() {
     if (!this._isLocalStorageSupported) {
-      console.error("LocalStorage is not supported");
+      throw new Error("LocalStorage is not supported");
     }
     return this._isLocalStorageSupported;
   }

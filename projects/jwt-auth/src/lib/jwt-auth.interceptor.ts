@@ -31,11 +31,8 @@ export class JwtAuthInterceptor implements HttpInterceptor {
                             case 401:
                                 return this.handle401Error(error, request, next);
                             case 500:
-                                console.error("500 error");
-                                console.error(error);
                                 return throwError(error);
                             default:
-                                console.error(error);
                                 return throwError(error);
                         }
                     } else {
@@ -57,7 +54,6 @@ export class JwtAuthInterceptor implements HttpInterceptor {
     }
 
     private handle400Error(errorResponse: HttpErrorResponse, request: HttpRequest<any>, next: HttpHandler) {
-        console.debug(errorResponse.error);
         if (errorResponse.error.error && errorResponse.error.error == "invalid_grant") {
             this._jwtAuth.logout();
             return throwError(errorResponse.error);
@@ -65,7 +61,6 @@ export class JwtAuthInterceptor implements HttpInterceptor {
     }
 
     private handle401Error(errorResponse: HttpErrorResponse, request: HttpRequest<any>, next: HttpHandler) {
-        console.debug(errorResponse.error);
         return this._jwtAuth.refreshToken()
             .pipe(
                 switchMap(x => {

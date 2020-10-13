@@ -1,6 +1,6 @@
 # JwtAuth
 
-Jwt Angular Authentication manager with Refresh Token management.
+Jwt Angular Authentication manager with automatic Refresh Token management.
 
 ## Installation 
 
