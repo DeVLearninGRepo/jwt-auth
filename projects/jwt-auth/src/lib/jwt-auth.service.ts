@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@angular/core';
-import { HttpClient, HttpHeaders, } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse, HttpHeaders, } from '@angular/common/http';
 import { Observable, BehaviorSubject, throwError, of } from 'rxjs';
 import { tap, map, catchError, filter, take } from 'rxjs/operators';
 import { TokenRequest } from './models/token-request';
@@ -8,6 +8,7 @@ import { JwtAuthConfig } from './models/jwt-auth-config';
 import { RefreshTokenRequest } from './models/refresh-token-request';
 import { JWT_AUTH_CONFIG } from './jwt-auth-config.injector';
 import * as moment_ from "moment";
+import { JwtResponseError } from './models/jwt-response-error';
 
 const moment = moment_;
 
@@ -49,12 +50,16 @@ export class JwtAuthService {
     private http: HttpClient,
     //private authStorage: AuthStorageService
   ) {
+    console.debug("JwtAuthService ctor");
+
     this._isLoggedInSubject = new BehaviorSubject<boolean>(false);
     this._jwtTokenSubject = new BehaviorSubject<JwtToken>(null);
     this._refreshTokenSubject = new BehaviorSubject<JwtToken>(null);
     this._isRefreshingToken = false;
     this._isLocalStorageSupported = this._checkLocalStorageIsSupported();
     this._getLocalStorageSupported();
+
+    //this._init();
   }
 
   public token(request: TokenRequest): Observable<JwtToken> {
@@ -77,7 +82,7 @@ export class JwtAuthService {
       map(x => x),
       catchError(err => {
         this._cleanToken();
-        throw err;
+        return this._handleError(err);
       })
     );
   }
@@ -108,7 +113,7 @@ export class JwtAuthService {
           }),
           catchError(err => {
             this._cleanToken();
-            throw err;
+            return this._handleError(err);
           })
         );
 
@@ -156,8 +161,8 @@ export class JwtAuthService {
         try {
           await this.refreshToken().toPromise();
         } catch (error) {
-          
           this.logout();
+          return this._handleError(error);
         }
       }
     } else {
@@ -177,7 +182,7 @@ export class JwtAuthService {
 
   private _getLocalStorageSupported() {
     if (!this._isLocalStorageSupported) {
-      throw new Error("LocalStorage is not supported");
+      console.error("LocalStorage is not supported");
     }
     return this._isLocalStorageSupported;
   }
@@ -206,4 +211,21 @@ export class JwtAuthService {
     return moment().utc().isAfter(this._jwtTokenSubject.value.refreshTokenExpiration);
   }
 
+  private _handleError(error) {
+    let message: string;
+    let detailedMessage: string;
+    if (error.error instanceof Error) {
+      console.error('An error occurred:', error.error.message);
+      message = error.error.message;
+    } else if (error instanceof HttpErrorResponse) {
+      if (error.status == 500) {
+        message = error.error?.message;
+        detailedMessage = error.error?.detailedMessage;
+      } else {
+        console.error(`Backend returned code ${error.status}, body was: ${error.message}`);
+        message = error.message;
+      }
+    }
+    return throwError(new JwtResponseError(message, detailedMessage));
+  }
 }
