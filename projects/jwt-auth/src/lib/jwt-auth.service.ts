@@ -9,6 +9,7 @@ import { RefreshTokenRequest } from './models/refresh-token-request';
 import { JWT_AUTH_CONFIG } from './jwt-auth-config.injector';
 import * as moment_ from "moment";
 import { JwtResponseError } from './models/jwt-response-error';
+import { TokenWithFacebookLoginRequest } from './models/token-with-facebook-login-request';
 
 const moment = moment_;
 
@@ -87,6 +88,27 @@ export class JwtAuthService {
     );
   }
 
+  public tokenWithFacebookLogin(request: TokenWithFacebookLoginRequest) {
+    this._cleanToken();
+
+    let headers = new HttpHeaders();
+
+    if (this._config.tokenWithFacebookUrl == null || this._config.tokenWithFacebookUrl == '') throw new Error("Configuration of tokenWithFacebookUrl is missing");
+
+    return this.http.post<JwtToken>(this._config.tokenWithFacebookUrl, request, {
+      headers: headers
+    }).pipe(
+      tap(x => {
+        this._setToken(x)
+      }),
+      map(x => x),
+      catchError(err => {
+        this._cleanToken();
+        return this._handleError(err);
+      })
+    );
+  }
+
   public logout() {
     this._cleanToken();
   }
@@ -112,7 +134,10 @@ export class JwtAuthService {
             this._refreshTokenSubject.next(x);
           }),
           catchError(err => {
-            this._cleanToken();
+            if (err.status == 401) {
+              //check del messaggio refresh_token
+              this._cleanToken();
+            }
             return this._handleError(err);
           })
         );
