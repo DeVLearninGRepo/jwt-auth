@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@angular/core';
 import { HttpClient, HttpErrorResponse, HttpHeaders, } from '@angular/common/http';
 import { Observable, BehaviorSubject, throwError, of } from 'rxjs';
-import { tap, map, catchError, filter, take } from 'rxjs/operators';
+import { tap, map, catchError, filter, take, finalize } from 'rxjs/operators';
 import { TokenRequest } from './models/token-request';
 import { JwtToken } from './models/jwt-token';
 import { JwtAuthConfig } from './models/jwt-auth-config';
@@ -114,11 +114,17 @@ export class JwtAuthService {
   }
 
   public refreshToken(): Observable<JwtToken> {
+    console.info("JwtAuth - refreshToken - enter");
+    
     if (this._jwtTokenSubject.value == null || this._jwtTokenSubject.value.token == null) {
+      console.error("JwtAuth - refreshToken this._jwtTokenSubject.value was null");
       return throwError("User is logged out");
     }
 
+    
     if (!this._isRefreshingToken) {
+      console.info("JwtAuth - refreshToken - this._isRefreshingToken false");
+
       this._isRefreshingToken = true;
       this._refreshTokenSubject.next(null);
 
@@ -134,14 +140,17 @@ export class JwtAuthService {
             this._refreshTokenSubject.next(x);
           }),
           catchError(err => {
+            this._isRefreshingToken = false;
             if (err.status == 401) {
               //check del messaggio refresh_token
               this._cleanToken();
             }
             return this._handleError(err);
+          }),
+          finalize(() => {
+            this._isRefreshingToken = false;
           })
         );
-
     } else {
       return this._refreshTokenSubject
         .pipe(
