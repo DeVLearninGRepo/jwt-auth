@@ -29,6 +29,7 @@ const moment = moment_;
 export class JwtAuthService {
 
   private _isLoggedInSubject: BehaviorSubject<boolean>;
+  private _isRefreshingTokenSubject: BehaviorSubject<boolean>;
   private _jwtTokenSubject: BehaviorSubject<JwtToken>;
   private _keyAuthStorage: string = "jwt-auth";
   private _isLocalStorageSupported: boolean = false;
@@ -43,17 +44,19 @@ export class JwtAuthService {
     return this._jwtTokenSubject.asObservable();
   }
 
+  public get refreshingToken$() {
+    return this._isRefreshingTokenSubject.asObservable();
+  }
+
   public get isLoggedIn() { return this._isLoggedInSubject.value; }
   public get jwtToken() { return this._jwtTokenSubject.value; }
 
   constructor(
     @Inject(JWT_AUTH_CONFIG) private readonly _config: JwtAuthConfig,
     private http: HttpClient,
-    //private authStorage: AuthStorageService
   ) {
-    console.debug("JwtAuthService ctor");
-
     this._isLoggedInSubject = new BehaviorSubject<boolean>(false);
+    this._isRefreshingTokenSubject = new BehaviorSubject<boolean>(false);
     this._jwtTokenSubject = new BehaviorSubject<JwtToken>(null);
     this._refreshTokenSubject = new BehaviorSubject<JwtToken>(null);
     this._isRefreshingToken = false;
@@ -126,6 +129,7 @@ export class JwtAuthService {
       console.info("JwtAuth - refreshToken - this._isRefreshingToken false");
 
       this._isRefreshingToken = true;
+      this._isRefreshingTokenSubject.next(this._isRefreshingToken);
       this._refreshTokenSubject.next(null);
 
       let request = new RefreshTokenRequest();
@@ -137,10 +141,12 @@ export class JwtAuthService {
           tap(x => {
             this._setToken(x)
             this._isRefreshingToken = false;
+            this._isRefreshingTokenSubject.next(this._isRefreshingToken);
             this._refreshTokenSubject.next(x);
           }),
           catchError(err => {
             this._isRefreshingToken = false;
+            this._isRefreshingTokenSubject.next(this._isRefreshingToken);
             if (err.status == 401) {
               //check del messaggio refresh_token
               this._cleanToken();
@@ -149,6 +155,7 @@ export class JwtAuthService {
           }),
           finalize(() => {
             this._isRefreshingToken = false;
+            this._isRefreshingTokenSubject.next(this._isRefreshingToken);
           })
         );
     } else {

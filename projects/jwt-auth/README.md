@@ -25,10 +25,10 @@ jwtAuthToken is the url to otain bearer token. Server response must the same of 
 export class JwtToken {
     username: string;
     email: string;
-    token: string;                          //MANDATORY
-    expires: moment.Moment;                 //MANDATORY
-    refreshToken: string;                   //MANDATORY
-    refreshTokenExpiration: moment.Moment;  //MANDATORY
+    token: string;                        
+    expires: moment.Moment;               
+    refreshToken: string;                 
+    refreshTokenExpiration: moment.Moment;
 }
 ```
 
