@@ -267,6 +267,7 @@ export class JwtAuthService {
         message = error.message;
       }
     }
-    return throwError(new JwtResponseError(message, detailedMessage));
+    let jwtResponse = new JwtResponseError(message, detailedMessage, error.status);
+    return throwError(jwtResponse);
   }
 }

@@ -65,10 +65,10 @@ export class JwtAuthInterceptor implements HttpInterceptor {
     // }
 
     private handle401Error(errorResponse: HttpErrorResponse, request: HttpRequest<any>, next: HttpHandler) {
-        console.debug("JwtAuthInterceptor handle401Error - start");
-        console.debug(errorResponse);
-        console.debug(request);
-        console.debug("JwtAuthInterceptor handle401Error - end");
+        // console.debug("JwtAuthInterceptor handle401Error - start");
+        // console.debug(errorResponse);
+        // console.debug(request);
+        // console.debug("JwtAuthInterceptor handle401Error - end");
         return this._jwtAuth.refreshToken()
             .pipe(
                 switchMap(x => {
