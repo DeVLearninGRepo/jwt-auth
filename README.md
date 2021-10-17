@@ -20,15 +20,26 @@ add to app.module this import:
 ```
 
 jwtAuthToken is the url to otain bearer token. Server response must the same of this class:
+Example
+
+```js
+export const environment = {
+  ...
+  jwtAuthToken: '/api/v1/jwtauth/token',
+  jwtAuthRefreshToken: '/api/v1/jwtauth/refreshToken',
+};
+```
+
+
 
 ```js
 export class JwtToken {
     username: string;
     email: string;
-    token: string;                          //MANDATORY
-    expires: moment.Moment;                 //MANDATORY
-    refreshToken: string;                   //MANDATORY
-    refreshTokenExpiration: moment.Moment;  //MANDATORY
+    token: string;                        
+    expires: moment.Moment;               
+    refreshToken: string;                 
+    refreshTokenExpiration: moment.Moment;
 }
 ```
 
@@ -40,7 +51,27 @@ jwtAuthRefreshToken is the url to refresh the bearer token. Server response must
 to make a login call method "token" of service "JwtAuthService"
 
 ```js
-this._jwtAuth.token({username: 'username', password: 'password'})   //return an observable
+    import { JwtAuthService } from '@devlearning/jwt-auth';
+    
+    ...
+
+    constructor(
+        ...
+        private readonly _jwtAuth: JwtAuthService
+    ) {
+
+    }
+
+    login() {
+        ...
+        this._jwtAuth.token({username: 'usernameOrEmail field value', password: 'password'})
+            .pipe(
+                ...
+            ).subscribe(x=> {
+                ...
+            });
+        ...
+    }
 ```
 
 In JwtAuthService is available two Observable for monitoring loggedin status:
@@ -74,7 +105,21 @@ export class AuthGuard extends JwtAuthGuard implements CanActivate {
     }
 
     canActivate(route: ActivatedRouteSnapshot, state: RouterStateSnapshot): Observable<boolean> {
-        return this.canActivateBase();
+        return this.canActivateBase(route, state)
+            .pipe(
+                map(x => {
+                    if (x) {
+                        return true;
+                    } else {
+                        this._router.navigateByUrl('/login'); //your login url
+                        return false;
+                    }
+                }),
+                catchError(e => {
+                    this._router.navigateByUrl('/login');  //your login url
+                    return of(false);
+                })
+            );
     }
 }
 ```

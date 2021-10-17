@@ -1,12 +1,8 @@
-import * as moment_ from "moment";
-
-const moment = moment_;
-
 export class JwtToken {
     username: string;
     email: string;
     token: string;
-    expires: moment.Moment;
+    expires: number;
     refreshToken: string;
-    refreshTokenExpiration: moment.Moment;
+    refreshTokenExpiration: number;
 }
