@@ -1,23 +1,27 @@
 import { Observable, throwError } from 'rxjs';
-import { Injectable } from '@angular/core';
+import { Inject, Injectable } from '@angular/core';
 import { HttpRequest, HttpHandler, HttpEvent, HttpInterceptor, HttpErrorResponse, HttpResponse } from '@angular/common/http';
 import { JwtAuthService } from './jwt-auth.service';
-import { catchError, concatMap, exhaustMap, map, mergeMap, switchMap } from 'rxjs/operators';
-import { Utils } from './utils';
+import { catchError, map, switchMap } from 'rxjs/operators';
+import { JWT_AUTH_CONFIG } from './jwt-auth-config.injector';
+import { JwtAuthConfig } from './models/jwt-auth-config';
+import { JwtAuthLogLevel } from './models/jwt-auth-log-level';
 
 @Injectable()
 export class JwtAuthInterceptor implements HttpInterceptor {
 
   constructor(
+    @Inject(JWT_AUTH_CONFIG) private readonly _config: JwtAuthConfig,
     private readonly _jwtAuth: JwtAuthService
   ) { }
 
   intercept(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
+    if (this._config.logLevel <= JwtAuthLogLevel.VERBOSE)
+      console.debug("JwtAuthInterceptor " + request.url);
+
     if (this._jwtAuth.isAuthenticationUrl(request.url)) {
       return <any>next.handle(request);
     }
-
-    let isInvalidToken = null;
 
     return <any>next.handle(this.applyCredentials(request, this._jwtAuth.jwtToken?.token))
       .pipe(
@@ -29,22 +33,20 @@ export class JwtAuthInterceptor implements HttpInterceptor {
         catchError((error) => {
           if (error instanceof HttpErrorResponse) {
             switch ((<HttpErrorResponse>error).status) {
+              // case 400:
+              //     return this.handle400Error(error, request, next);
               case 401:
-                isInvalidToken = error.headers.get("invalid_token");
-                if (Utils.isDefinedAndNotNull(isInvalidToken)) {
-                  this._jwtAuth.logout();
-                  return throwError(error);
-                } else {
+                if (this._jwtAuth.jwtToken != null && this._jwtAuth.isLoggedIn) {
                   return this.handle401Error(error, request, next);
-                }
-              case 403:
-                isInvalidToken = error.headers.get("invalid_token");
-                if (Utils.isDefinedAndNotNull(isInvalidToken)) {
-                  this._jwtAuth.logout();
+                } else {
                   return throwError(error);
                 }
-                break;
+              // case 500:
+              //     console.error("500 error");
+              //     console.error(error);
+              //     return throwError(error);
               default:
+                //     console.error(error);
                 return throwError(error);
             }
           } else {
@@ -76,9 +78,7 @@ export class JwtAuthInterceptor implements HttpInterceptor {
   private handle401Error(errorResponse: HttpErrorResponse, request: HttpRequest<any>, next: HttpHandler) {
     return this._jwtAuth.refreshToken()
       .pipe(
-        concatMap(x => {
-          return next.handle(this.applyCredentials(request, x.token));
-        })
+        switchMap(x => next.handle(this.applyCredentials(request, x.token)))
       );
   }
 }

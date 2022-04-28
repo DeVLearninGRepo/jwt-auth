@@ -6,7 +6,9 @@
         "start": "ng serve",
         "build": "ng build",
         "test": "ng test",
-        "lint": "ng lint"
+        "lint": "ng lint",
+        "build:prod": "ng build --configuration production",
+        "publish": "npm run build:prod && cd dist\\jwt-auth && npm publish --access public"
     },
     "dependencies": {
         "@angular/animations": "~10.1.5",
@@ -19,7 +21,8 @@
         "@angular/router": "~10.1.5",
         "rxjs": "~6.6.0",
         "tslib": "^2.0.0",
-        "zone.js": "~0.10.2"
+        "zone.js": "~0.10.2",
+        "@devlearning/mutex-fast-lock": "1.0.4"
     },
     "devDependencies": {
         "@angular-devkit/build-angular": "~0.1001.6",

@@ -13,9 +13,9 @@ export class JwtAuthGuard {
     if (this._jwtAuthService.jwtToken == null
         || this._jwtAuthService.isLoggedIn == null
         || !this._jwtAuthService.isLoggedIn
-        || this._jwtAuthService.isRefreshTokenExpires()) { 
+        || this._jwtAuthService.isRefreshTokenExpired()) { 
       return of(false);
-    } else if (this._jwtAuthService.isTokenExpires()) {
+    } else if (this._jwtAuthService.isTokenExpired()) {
       return this._jwtAuthService.refreshToken()
         .pipe(
             mergeMap(x => of(true)),
