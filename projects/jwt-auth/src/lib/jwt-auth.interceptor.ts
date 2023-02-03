@@ -6,13 +6,14 @@ import { catchError, map, switchMap } from 'rxjs/operators';
 import { JWT_AUTH_CONFIG } from './jwt-auth-config.injector';
 import { JwtAuthConfig } from './models/jwt-auth-config';
 import { JwtAuthLogLevel } from './models/jwt-auth-log-level';
+import { JwtTokenBase } from './models/jwt-token-base';
 
 @Injectable()
-export class JwtAuthInterceptor implements HttpInterceptor {
+export class JwtAuthInterceptor<Token extends JwtTokenBase> implements HttpInterceptor {
 
   constructor(
     @Inject(JWT_AUTH_CONFIG) private readonly _config: JwtAuthConfig,
-    private readonly _jwtAuth: JwtAuthService
+    private readonly _jwtAuth: JwtAuthService<Token>
   ) { }
 
   intercept(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
@@ -23,7 +24,7 @@ export class JwtAuthInterceptor implements HttpInterceptor {
       return <any>next.handle(request);
     }
 
-    return <any>next.handle(this.applyCredentials(request, this._jwtAuth.jwtToken?.token))
+    return <any>next.handle(this.applyCredentials(request, this._jwtAuth.jwtToken?.accessToken))
       .pipe(
         map((event: HttpEvent<any>) => {
           if (event instanceof HttpResponse) {
@@ -76,9 +77,11 @@ export class JwtAuthInterceptor implements HttpInterceptor {
   // }
 
   private handle401Error(errorResponse: HttpErrorResponse, request: HttpRequest<any>, next: HttpHandler) {
+    const wwwAuthenticate = errorResponse.headers.get('WWW-Authenticate');
+    
     return this._jwtAuth.refreshToken()
       .pipe(
-        switchMap(x => next.handle(this.applyCredentials(request, x.token)))
+        switchMap(x => next.handle(this.applyCredentials(request, x.accessToken)))
       );
   }
 }

@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { Observable, BehaviorSubject, throwError, of, iif } from 'rxjs';
+import { Observable, BehaviorSubject, throwError } from 'rxjs';
 import { tap, catchError, filter, take, finalize, switchMap } from 'rxjs/operators';
-import { JwtToken } from './models/jwt-token';
+import { JwtTokenBase } from './models/jwt-token-base';
 import { JwtAuthConfig } from './models/jwt-auth-config';
 import { RefreshTokenRequest } from './models/refresh-token-request';
 import { JWT_AUTH_CONFIG } from './jwt-auth-config.injector';
@@ -11,7 +11,7 @@ import { MutexFastLockService } from '@devlearning/mutex-fast-lock';
 import { JwtAuthLogLevel } from './models/jwt-auth-log-level';
 
 
-const JWT_AUTH_KEY_STORAGE: string = "cnet-jwt-auth";
+const JWT_AUTH_KEY_STORAGE: string = "jwt-auth";
 const TOKEN_KEY_STORAGE: string = JWT_AUTH_KEY_STORAGE + "-token";
 const REFRESHING_KEY_STORAGE: string = JWT_AUTH_KEY_STORAGE + "-refreshing";
 const REFRESHING_EVENT_CHANGED: string = JWT_AUTH_KEY_STORAGE + "-refreshing-changed";
@@ -19,13 +19,13 @@ const REFRESHING_EVENT_CHANGED: string = JWT_AUTH_KEY_STORAGE + "-refreshing-cha
 @Injectable({
   providedIn: 'root'
 })
-export class JwtAuthService {
+export class JwtAuthService<Token extends JwtTokenBase> {
 
   private _isLoggedInSubject: BehaviorSubject<boolean>;
   private _isRefreshingTokenSubject: BehaviorSubject<boolean>;
-  private _jwtTokenSubject: BehaviorSubject<JwtToken>;
+  private _jwtTokenSubject: BehaviorSubject<Token>;
   private _isLocalStorageSupported: boolean = false;
-  private _refreshTokenSubject: BehaviorSubject<JwtToken>;
+  private _refreshTokenSubject: BehaviorSubject<Token>;
 
   public get isLoggedIn$() {
     return this._isLoggedInSubject.asObservable();
@@ -49,8 +49,8 @@ export class JwtAuthService {
   ) {
     this._isLoggedInSubject = new BehaviorSubject<boolean>(false);
     this._isRefreshingTokenSubject = new BehaviorSubject<boolean>(false);
-    this._jwtTokenSubject = new BehaviorSubject<JwtToken>(null);
-    this._refreshTokenSubject = new BehaviorSubject<JwtToken>(null);
+    this._jwtTokenSubject = new BehaviorSubject<Token>(null);
+    this._refreshTokenSubject = new BehaviorSubject<Token>(null);
     this._isLocalStorageSupported = this._checkLocalStorageIsSupported();
     this._getLocalStorageSupported();
     this.setRefreshingToken(false);
@@ -60,8 +60,8 @@ export class JwtAuthService {
       if (ev.key === TOKEN_KEY_STORAGE) {
         if (that._config.logLevel <= JwtAuthLogLevel.VERBOSE)
           console.debug("JwtAuth - eventListener storage token changed");
-        let token = <JwtToken>JSON.parse(ev.newValue);
-        if (token?.token != that.jwtToken.token) {
+        let token = <Token>JSON.parse(ev.newValue);
+        if (token?.accessToken != that.jwtToken.accessToken) {
           that._setToken(token);
           that._refreshTokenSubject.next(token);
         }
@@ -69,15 +69,34 @@ export class JwtAuthService {
     });
   }
 
-  public setToken(jwtToken: JwtToken) {
+  public setToken(jwtToken: Token) {
     this._setToken(jwtToken);
   }
 
-  public refreshToken(): Observable<JwtToken> {
-    if (this._jwtTokenSubject.value == null || this._jwtTokenSubject.value.token == null) {
+  public token(request: any): Observable<Token> {
+    // if (this._jwtTokenSubject.value != null
+    //   && this._jwtTokenSubject.value.accessToken != null
+    //   && !this.isTokenExpired()
+    //   && !this.isRefreshTokenExpired()) {
+    //   return of(this._jwtTokenSubject.value);
+    // }
+
+    return this._http.post<Token>(this._config.tokenUrl, request).pipe(
+      tap(x => {
+        this._setToken(x)
+      }),
+      catchError(err => {
+        this._cleanToken();
+        return this._handleError(err);
+      })
+    );
+  }
+  
+  public refreshToken(): Observable<Token> {
+    if (this._jwtTokenSubject.value == null || this._jwtTokenSubject.value.accessToken == null) {
       if (this._config.logLevel <= JwtAuthLogLevel.ERROR)
         console.error("JwtAuth - refreshToken this._jwtTokenSubject.value was null");
-      return throwError("User is logged out");
+      return throwError(() => new Error("User is logged out"));
     }
 
     if (this._config.logLevel <= JwtAuthLogLevel.VERBOSE)
@@ -98,7 +117,7 @@ export class JwtAuthService {
                   let request = new RefreshTokenRequest();
                   request.username = jwtToken.username;
                   request.refreshToken = jwtToken.refreshToken;
-                  return this._http.post<JwtToken>(this._config.refreshUrl, request)
+                  return this._http.post<Token>(this._config.refreshUrl, request)
                     .pipe(
                       tap(x => {
                         this._setToken(x)
@@ -116,7 +135,7 @@ export class JwtAuthService {
                             );
                         } else {
                           if (err.status == 468) {
-                            return throwError("Refresh token expired");
+                            return throwError(() => new Error("Refresh token expired"));
                           } else {
                             this._cleanToken();
                             return this._handleError(err);
@@ -151,7 +170,7 @@ export class JwtAuthService {
                 take(1)
               )
           } else {
-            return throwError(new Error(err));
+            return throwError(() => new Error(err));
           }
         })
       );
@@ -173,7 +192,7 @@ export class JwtAuthService {
     localStorage.setItem(REFRESHING_KEY_STORAGE, '' + refreshing);
   }
 
-  private _setToken(jwtToken: JwtToken) {
+  private _setToken(jwtToken: Token) {
     if (jwtToken != null) {
       this._saveJwtToken(jwtToken);
       this._isLoggedInSubject.next(true);
@@ -184,8 +203,6 @@ export class JwtAuthService {
   }
 
   private _cleanToken() {
-    //questa remove fatta qui è orrenda, ma per il momento non ho una soluzione pulita
-    localStorage.removeItem("cnet-session-info");
     this._deleteJwtToken();
     this._isLoggedInSubject.next(false);
     this._jwtTokenSubject.next(null);
@@ -195,7 +212,7 @@ export class JwtAuthService {
     // console.debug("JWT init");
     let jwtToken = this._getJwtToken();
     // console.debug("JWT init " + JSON.stringify(jwtToken));
-    if (jwtToken != null && jwtToken.token != null) {
+    if (jwtToken != null && jwtToken.accessToken != null) {
       this._jwtTokenSubject.next(jwtToken);
       if (!this.isTokenExpired()) {
         // console.debug("JWT init !isTokenExpired");
@@ -233,14 +250,14 @@ export class JwtAuthService {
     return this._isLocalStorageSupported;
   }
 
-  private _saveJwtToken(jwtToken: JwtToken) {
+  private _saveJwtToken(jwtToken: Token) {
     if (!this._isLocalStorageSupported) return;
     localStorage.setItem(TOKEN_KEY_STORAGE, JSON.stringify(jwtToken));
   }
 
   private _getJwtToken() {
     if (!this._isLocalStorageSupported) return undefined;
-    return <JwtToken>JSON.parse(localStorage.getItem(TOKEN_KEY_STORAGE));
+    return <Token>JSON.parse(localStorage.getItem(TOKEN_KEY_STORAGE));
   }
 
   private _deleteJwtToken() {
@@ -248,7 +265,7 @@ export class JwtAuthService {
   }
 
   public isRefreshTokenExpired() {
-    return new Date().getTime() > this._jwtTokenSubject.value.refreshTokenExpiration;
+    return new Date().getTime() > this._jwtTokenSubject.value.refreshTokenExpiresAt;
   }
 
   public isTokenExpired() {
@@ -263,8 +280,8 @@ export class JwtAuthService {
     this._config.refreshUrl = url;
   }
 
-  private _checkTokenIsExpired(token: JwtToken) {
-    return new Date().getTime() > token.expires;
+  private _checkTokenIsExpired(token: Token) {
+    return new Date().getTime() > token.expiresAt;
   }
 
   private _handleError(error) {
@@ -284,6 +301,6 @@ export class JwtAuthService {
       }
     }
     let jwtResponse = new JwtResponseError(message, detailedMessage, error.status);
-    return throwError(jwtResponse);
+    return throwError(() => jwtResponse);
   }
 }
