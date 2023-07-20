@@ -1,11 +1,11 @@
 {
     "name": "@devlearning/jwt-auth",
-    "version": "1.3.1",
+    "version": "1.4.4",
     "peerDependencies": {
-        "@angular/common": "15.1.2",
-        "@angular/core": "15.1.2",
-        "rxjs": "7.8.0",
-        "@devlearning/mutex-fast-lock": "1.0.5"
+        "@angular/common": "^16.0.4",
+        "@angular/core": "^16.0.4",
+        "rxjs": "^7.5.0",
+        "@devlearning/mutex-fast-lock": "^1.0.6"
     },
     "dependencies": {
         "tslib": "^2.0.0"

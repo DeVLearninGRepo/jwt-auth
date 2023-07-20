@@ -7,6 +7,7 @@ import { JWT_AUTH_CONFIG } from './jwt-auth-config.injector';
 import { JwtAuthConfig } from './models/jwt-auth-config';
 import { JwtAuthLogLevel } from './models/jwt-auth-log-level';
 import { JwtTokenBase } from './models/jwt-token-base';
+import { ERROR_INVALID_TOKEN, WWWAuthenticateMessageFactory } from './models/www-authenticate-message';
 
 @Injectable()
 export class JwtAuthInterceptor<Token extends JwtTokenBase> implements HttpInterceptor {
@@ -77,11 +78,15 @@ export class JwtAuthInterceptor<Token extends JwtTokenBase> implements HttpInter
   // }
 
   private handle401Error(errorResponse: HttpErrorResponse, request: HttpRequest<any>, next: HttpHandler) {
-    const wwwAuthenticate = errorResponse.headers.get('WWW-Authenticate');
-    
-    return this._jwtAuth.refreshToken()
-      .pipe(
-        switchMap(x => next.handle(this.applyCredentials(request, x.accessToken)))
-      );
+    const wwwAuthenticate = WWWAuthenticateMessageFactory.create(errorResponse.headers.get('WWW-Authenticate'));
+
+    if (wwwAuthenticate.error == ERROR_INVALID_TOKEN) {
+      return this._jwtAuth.refreshToken()
+        .pipe(
+          switchMap(x => next.handle(this.applyCredentials(request, x.accessToken)))
+        );
+    }else{
+      return throwError(() => new Error(wwwAuthenticate.description + ' ' + wwwAuthenticate.description));
+    }
   }
 }

@@ -60,6 +60,7 @@ export class JwtAuthService<Token extends JwtTokenBase> {
       if (ev.key === TOKEN_KEY_STORAGE) {
         if (that._config.logLevel <= JwtAuthLogLevel.VERBOSE)
           console.debug("JwtAuth - eventListener storage token changed");
+          
         let token = <Token>JSON.parse(ev.newValue);
         if (token?.accessToken != that.jwtToken.accessToken) {
           that._setToken(token);

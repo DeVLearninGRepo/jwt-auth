@@ -5,6 +5,7 @@ import { JWT_AUTH_CONFIG } from './jwt-auth-config.injector';
 import { JwtAuthInterceptor } from './jwt-auth.interceptor';
 import { JwtAuthService } from './jwt-auth.service';
 import { JwtAuthConfig } from './models/jwt-auth-config';
+import { Token } from '@angular/compiler';
 
 @NgModule({
   imports: [
@@ -34,7 +35,7 @@ export class JwtAuthModule {
   }
 }
 
-export function init(jwtAuth: JwtAuthService) {
+export function init(jwtAuth: JwtAuthService<any>) {
   const x = async () => { await jwtAuth.init() };
   return x;
 }

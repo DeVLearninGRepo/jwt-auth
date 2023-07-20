@@ -2,11 +2,12 @@ import { ActivatedRouteSnapshot, RouterStateSnapshot } from '@angular/router';
 import { Observable, of } from 'rxjs';
 import { JwtAuthService } from './jwt-auth.service';
 import { catchError, mergeMap } from 'rxjs/operators';
+import { JwtTokenBase } from '../public-api';
 
-export class JwtAuthGuard {
+export class JwtAuthGuard<Token extends JwtTokenBase> {
 
   constructor(
-    private readonly _jwtAuthService: JwtAuthService
+    private readonly _jwtAuthService: JwtAuthService<Token>
   ) { }
 
   canActivateBase(route: ActivatedRouteSnapshot, state: RouterStateSnapshot): Observable<boolean> {
