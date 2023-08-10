@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { Observable, BehaviorSubject, throwError } from 'rxjs';
-import { tap, catchError, filter, take, finalize, switchMap } from 'rxjs/operators';
+import { Observable, BehaviorSubject, throwError, of } from 'rxjs';
+import { tap, catchError, filter, take, finalize, switchMap, exhaustMap } from 'rxjs/operators';
 import { JwtTokenBase } from './models/jwt-token-base';
 import { JwtAuthConfig } from './models/jwt-auth-config';
 import { RefreshTokenRequest } from './models/refresh-token-request';
@@ -9,6 +9,8 @@ import { JWT_AUTH_CONFIG } from './jwt-auth-config.injector';
 import { JwtResponseError } from './models/jwt-response-error';
 import { MutexFastLockService } from '@devlearning/mutex-fast-lock';
 import { JwtAuthLogLevel } from './models/jwt-auth-log-level';
+import { StorageType } from '../public-api';
+import { ERROR_EXPIRED_REFRESH_TOKEN, WWWAuthenticateMessageFactory } from './models/www-authenticate-message';
 
 
 const JWT_AUTH_KEY_STORAGE: string = "jwt-auth";
@@ -26,6 +28,7 @@ export class JwtAuthService<Token extends JwtTokenBase> {
   private _jwtTokenSubject: BehaviorSubject<Token>;
   private _isLocalStorageSupported: boolean = false;
   private _refreshTokenSubject: BehaviorSubject<Token>;
+  private _storage: Storage;
 
   public get isLoggedIn$() {
     return this._isLoggedInSubject.asObservable();
@@ -51,7 +54,14 @@ export class JwtAuthService<Token extends JwtTokenBase> {
     this._isRefreshingTokenSubject = new BehaviorSubject<boolean>(false);
     this._jwtTokenSubject = new BehaviorSubject<Token>(null);
     this._refreshTokenSubject = new BehaviorSubject<Token>(null);
-    this._isLocalStorageSupported = this._checkLocalStorageIsSupported();
+
+    if (this._config.storageType == StorageType.SESSION_STORAGE) {
+      this._storage = sessionStorage;
+    } else {
+      this._storage = localStorage;
+    }
+
+    this._isLocalStorageSupported = this._checkStorageIsSupported();
     this._getLocalStorageSupported();
     this.setRefreshingToken(false);
 
@@ -60,7 +70,7 @@ export class JwtAuthService<Token extends JwtTokenBase> {
       if (ev.key === TOKEN_KEY_STORAGE) {
         if (that._config.logLevel <= JwtAuthLogLevel.VERBOSE)
           console.debug("JwtAuth - eventListener storage token changed");
-          
+
         let token = <Token>JSON.parse(ev.newValue);
         if (token?.accessToken != that.jwtToken.accessToken) {
           that._setToken(token);
@@ -70,18 +80,42 @@ export class JwtAuthService<Token extends JwtTokenBase> {
     });
   }
 
-  public setToken(jwtToken: Token) {
-    this._setToken(jwtToken);
+  public init() {
+    return of(this._getJwtToken())
+      .pipe(
+        exhaustMap(jwtToken => {
+          if (jwtToken != null && jwtToken.accessToken != null) {
+            this._jwtTokenSubject.next(jwtToken);
+            if (!this.isTokenExpired()) {
+              if (this._config.logLevel <= JwtAuthLogLevel.VERBOSE)
+                console.debug("JwtAuth - init - isTokenExpired: false");
+
+              this._setToken(jwtToken);
+              return of(jwtToken);
+            } else if (!this.isRefreshTokenExpired()) {
+              if (this._config.logLevel <= JwtAuthLogLevel.VERBOSE)
+                console.debug("JwtAuth - init - isRefreshTokenExpired: false");
+
+              return this.refreshToken()
+                .pipe(
+                  catchError((err, obs) => {
+                    this.logout();
+                    return this._handleError(err);
+                  })
+                );
+            }
+          } else {
+            if (this._config.logLevel <= JwtAuthLogLevel.VERBOSE)
+              console.debug("JwtAuth - init - token is null");
+
+            this.logout();
+            return of(null);
+          }
+        })
+      );
   }
 
   public token(request: any): Observable<Token> {
-    // if (this._jwtTokenSubject.value != null
-    //   && this._jwtTokenSubject.value.accessToken != null
-    //   && !this.isTokenExpired()
-    //   && !this.isRefreshTokenExpired()) {
-    //   return of(this._jwtTokenSubject.value);
-    // }
-
     return this._http.post<Token>(this._config.tokenUrl, request).pipe(
       tap(x => {
         this._setToken(x)
@@ -92,7 +126,7 @@ export class JwtAuthService<Token extends JwtTokenBase> {
       })
     );
   }
-  
+
   public refreshToken(): Observable<Token> {
     if (this._jwtTokenSubject.value == null || this._jwtTokenSubject.value.accessToken == null) {
       if (this._config.logLevel <= JwtAuthLogLevel.ERROR)
@@ -137,6 +171,12 @@ export class JwtAuthService<Token extends JwtTokenBase> {
                         } else {
                           if (err.status == 468) {
                             return throwError(() => new Error("Refresh token expired"));
+                          } else if (err.status == 401) {
+                            const wwwAuthenticate = WWWAuthenticateMessageFactory.create(err.headers.get('WWW-Authenticate'));
+                            if (wwwAuthenticate.error == ERROR_EXPIRED_REFRESH_TOKEN) {
+                              this._cleanToken();
+                              return throwError(() => new Error("Refresh token expired"));
+                            }
                           } else {
                             this._cleanToken();
                             return this._handleError(err);
@@ -185,12 +225,32 @@ export class JwtAuthService<Token extends JwtTokenBase> {
     return url == this._config.tokenUrl || url == this._config.refreshUrl;
   }
 
+  public isRefreshTokenExpired() {
+    return new Date().getTime() > this._jwtTokenSubject.value.refreshTokenExpiresAt;
+  }
+
+  public isTokenExpired() {
+    return this._checkTokenIsExpired(this._jwtTokenSubject.getValue());
+  }
+
+  public setTokenUrl(url: string) {
+    this._config.tokenUrl = url;
+  }
+
+  public setRefreshUrl(url: string) {
+    this._config.refreshUrl = url;
+  }
+
   private getIsRefreshingToken() {
-    return localStorage.getItem(REFRESHING_KEY_STORAGE) == 'true';
+    return this._storage.getItem(REFRESHING_KEY_STORAGE) == 'true';
   }
 
   private setRefreshingToken(refreshing: boolean) {
-    localStorage.setItem(REFRESHING_KEY_STORAGE, '' + refreshing);
+    this._storage.setItem(REFRESHING_KEY_STORAGE, '' + refreshing);
+  }
+
+  public setToken(jwtToken: Token) {
+    this._setToken(jwtToken);
   }
 
   private _setToken(jwtToken: Token) {
@@ -209,34 +269,10 @@ export class JwtAuthService<Token extends JwtTokenBase> {
     this._jwtTokenSubject.next(null);
   }
 
-  public async init() {
-    // console.debug("JWT init");
-    let jwtToken = this._getJwtToken();
-    // console.debug("JWT init " + JSON.stringify(jwtToken));
-    if (jwtToken != null && jwtToken.accessToken != null) {
-      this._jwtTokenSubject.next(jwtToken);
-      if (!this.isTokenExpired()) {
-        // console.debug("JWT init !isTokenExpired");
-        this._setToken(jwtToken);
-      } else if (!this.isRefreshTokenExpired()) {
-        // console.debug("JWT init isTokenExpired");
-        try {
-          // console.debug("JWT init refresh");
-          await this.refreshToken().toPromise();
-        } catch (error) {
-          this.logout();
-          return this._handleError(error).toPromise();
-        }
-      }
-    } else {
-      this.logout();
-    }
-  }
-
-  private _checkLocalStorageIsSupported() {
+  private _checkStorageIsSupported() {
     try {
-      localStorage.setItem(JWT_AUTH_KEY_STORAGE + '-test-storage', "test");
-      localStorage.removeItem(JWT_AUTH_KEY_STORAGE + '-test-storage');
+      this._storage.setItem(JWT_AUTH_KEY_STORAGE + '-test-storage', "test");
+      this._storage.removeItem(JWT_AUTH_KEY_STORAGE + '-test-storage');
       return true;
     } catch (e) {
       return false;
@@ -253,32 +289,16 @@ export class JwtAuthService<Token extends JwtTokenBase> {
 
   private _saveJwtToken(jwtToken: Token) {
     if (!this._isLocalStorageSupported) return;
-    localStorage.setItem(TOKEN_KEY_STORAGE, JSON.stringify(jwtToken));
+    this._storage.setItem(TOKEN_KEY_STORAGE, JSON.stringify(jwtToken));
   }
 
   private _getJwtToken() {
     if (!this._isLocalStorageSupported) return undefined;
-    return <Token>JSON.parse(localStorage.getItem(TOKEN_KEY_STORAGE));
+    return <Token>JSON.parse(this._storage.getItem(TOKEN_KEY_STORAGE));
   }
 
   private _deleteJwtToken() {
-    localStorage.removeItem(TOKEN_KEY_STORAGE);
-  }
-
-  public isRefreshTokenExpired() {
-    return new Date().getTime() > this._jwtTokenSubject.value.refreshTokenExpiresAt;
-  }
-
-  public isTokenExpired() {
-    return this._checkTokenIsExpired(this._jwtTokenSubject.getValue());
-  }
-
-  public setTokenUrl(url: string) {
-    this._config.tokenUrl = url;
-  }
-
-  public setRefreshUrl(url: string) {
-    this._config.refreshUrl = url;
+    this._storage.removeItem(TOKEN_KEY_STORAGE);
   }
 
   private _checkTokenIsExpired(token: Token) {

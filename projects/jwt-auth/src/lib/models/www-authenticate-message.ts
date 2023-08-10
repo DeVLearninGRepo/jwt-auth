@@ -1,4 +1,5 @@
 export const ERROR_INVALID_TOKEN = 'invalid_token';
+export const ERROR_EXPIRED_REFRESH_TOKEN = 'expired_refresh_token';
 
 export class WWWAuthenticateMessage {
     scheme: string;
@@ -18,25 +19,22 @@ export class WWWAuthenticateMessageFactory {
     public static create(content: string) {
         if (content == null) return <WWWAuthenticateMessage>null;
 
-        if (!content.startsWith("bearer")) throw new Error("Unmanaged scheme authentication");
+        if (!content.toLowerCase().startsWith("bearer")) throw new Error("Unmanaged scheme authentication");
 
-        const parts = content.split(' ');
-        let message = null;
+        //Bearer error="invalid_token", error_description="The token expired at '07/25/2023 08:05:20'"
+        let message = content;
+        const parts = content.substring("bearer ".length).split(',');
         let error = null;
         let description = null;
 
         parts.forEach(part => {
-            if (part.startsWith("error")) {
-                error = part.split('=')[1].replace("\"", '');
-            } else if (part.startsWith("error_description")) {
-                description = part.split('=')[1].replace("\"", '');
+            part = part.trim();
+            if (part.startsWith("error=")) {
+                error = part.split('=')[1].replaceAll("\"", '').replaceAll(',', '');
+            } else if (part.startsWith("error_description=")) {
+                description = part.split('=')[1].replaceAll("\"", '').replaceAll(',', '');
             }
         });
-
-        // error="invalid_token",
-        // error_description="The access token expired"
-        message = content[0];
-
         return new WWWAuthenticateMessage(message, error, description);
     }
 }
