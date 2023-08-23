@@ -8,7 +8,7 @@
         "test": "ng test",
         "lint": "ng lint",
         "build:prod": "ng build jwt-auth --configuration production",
-        "publish": "npm run build:prod && cd dist\\jwt-auth && npm publish --access public"
+        "deploy": "npm run build:prod && cd dist\\jwt-auth && npm publish --access public"
     },
     "dependencies": {
         "@angular/common": "^16.0.4",

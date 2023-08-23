@@ -1,6 +1,6 @@
 {
     "name": "@devlearning/jwt-auth",
-    "version": "1.4.11",
+    "version": "1.4.14",
     "peerDependencies": {
         "@angular/common": "^16.0.4",
         "@angular/core": "^16.0.4",

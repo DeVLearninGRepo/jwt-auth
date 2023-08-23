@@ -103,6 +103,12 @@ export class JwtAuthService<Token extends JwtTokenBase> {
                     return this._handleError(err);
                   })
                 );
+            } else {
+              if (this._config.logLevel <= JwtAuthLogLevel.VERBOSE)
+                console.debug("JwtAuth - init - token and refresh token is expired");
+
+              this.logout();
+              return of(null);
             }
           } else {
             if (this._config.logLevel <= JwtAuthLogLevel.VERBOSE)
@@ -226,11 +232,11 @@ export class JwtAuthService<Token extends JwtTokenBase> {
   }
 
   public isRefreshTokenExpired() {
-    return new Date().getTime() > this._jwtTokenSubject.value.refreshTokenExpiresAt;
+    return new Date().getTime() > this._jwtTokenSubject.value.refreshTokenExpiresIn;
   }
 
   public isTokenExpired() {
-    return this._checkTokenIsExpired(this._jwtTokenSubject.getValue());
+    return this._checkTokenIsExpired(this._jwtTokenSubject.value);
   }
 
   public setTokenUrl(url: string) {
@@ -302,7 +308,7 @@ export class JwtAuthService<Token extends JwtTokenBase> {
   }
 
   private _checkTokenIsExpired(token: Token) {
-    return new Date().getTime() > token.expiresAt;
+    return new Date().getTime() > token.expiresIn;
   }
 
   private _handleError(error) {
