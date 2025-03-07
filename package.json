@@ -1,6 +1,6 @@
 {
   "name": "jwt-auth-workspace",
-  "version": "17.3.7",
+  "version": "18.2.13",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
@@ -18,7 +18,7 @@
     "rxjs": "^7.5.0",
     "tslib": "^2.5.0",
     "zone.js": "~0.14.10",
-    "@devlearning/mutex-fast-lock": "17.3.7"
+    "@devlearning/mutex-fast-lock": "19.2.1"
   },
   "devDependencies": {
     "@angular-devkit/build-angular": "^18.2.14",
