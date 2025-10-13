@@ -1,14 +1,14 @@
 {
     "name": "@devlearning/jwt-auth",
-    "version": "19.2.1",
+    "version": "20.3.4",
     "peerDependencies": {
-        "@angular/common": "^19.2.1",
-        "@angular/core": "^19.2.1",
+        "@angular/common": "^20.3.4",
+        "@angular/core": "^20.3.4",
         "rxjs": "^7.5.0",
-        "@devlearning/mutex-fast-lock": "^19.2.1"
+        "@devlearning/mutex-fast-lock": "^20.3.4"
     },
     "dependencies": {
-        "tslib": "^2.0.0"
+        "tslib": "^2.6.2"
     },
     "description": "Jwt Angular Authentication manager with automatic Refresh Token management.",
     "author": "Luca Evaroni",
