@@ -11,4 +11,4 @@ export * from './lib/models/token-request';
 export * from './lib/jwt-auth.service';
 export * from './lib/jwt-auth.interceptor';
 export * from './lib/jwt-auth.guard';
-export * from './lib/jwt-auth.module';
+export * from './lib/jwt-auth.providers';
