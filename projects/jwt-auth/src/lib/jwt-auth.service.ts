@@ -25,24 +25,29 @@ export class JwtAuthService<Token extends JwtTokenBase> {
 
   private _isLoggedInSubject: BehaviorSubject<boolean>;
   private _isRefreshingTokenSubject: BehaviorSubject<boolean>;
-  private _jwtTokenSubject: BehaviorSubject<Token>;
+  private _jwtTokenSubject: BehaviorSubject<Token | null>;
   private _isLocalStorageSupported: boolean = false;
-  private _refreshTokenSubject: BehaviorSubject<Token>;
+  private _refreshTokenSubject: BehaviorSubject<Token | null>;
   private _storage: Storage;
 
+  /** Emits whenever the login state changes. */
   public get isLoggedIn$() {
     return this._isLoggedInSubject.asObservable();
   }
 
+  /** Emits whenever the current token changes (null when logged out). */
   public get jwtToken$() {
     return this._jwtTokenSubject.asObservable();
   }
 
+  /** Emits `true` while a token refresh is in progress. */
   public get refreshingToken$() {
     return this._isRefreshingTokenSubject.asObservable();
   }
 
+  /** Current login state (synchronous). */
   public get isLoggedIn() { return this._isLoggedInSubject.value; }
+  /** Current token (synchronous). `null` when logged out. */
   public get jwtToken() { return this._jwtTokenSubject.value; }
 
   constructor(
@@ -52,8 +57,8 @@ export class JwtAuthService<Token extends JwtTokenBase> {
   ) {
     this._isLoggedInSubject = new BehaviorSubject<boolean>(false);
     this._isRefreshingTokenSubject = new BehaviorSubject<boolean>(false);
-    this._jwtTokenSubject = new BehaviorSubject<Token>(null);
-    this._refreshTokenSubject = new BehaviorSubject<Token>(null);
+    this._jwtTokenSubject = new BehaviorSubject<Token | null>(null);
+    this._refreshTokenSubject = new BehaviorSubject<Token | null>(null);
 
     if (this._config.storageType == StorageType.SESSION_STORAGE) {
       this._storage = sessionStorage;
@@ -71,15 +76,20 @@ export class JwtAuthService<Token extends JwtTokenBase> {
         if (that._config.logLevel <= JwtAuthLogLevel.VERBOSE)
           console.debug("JwtAuth - eventListener storage token changed");
 
-        let token = <Token>JSON.parse(ev.newValue);
-        if (token?.accessToken != that.jwtToken.accessToken) {
-          that._setToken(token);
+        let token = <Token | null>JSON.parse(ev.newValue ?? 'null');
+        if (token?.accessToken != that.jwtToken?.accessToken) {
+          that._setToken(token as Token);
           that._refreshTokenSubject.next(token);
         }
       }
     });
   }
 
+  /**
+   * Restores the session from storage. If the access token is expired but the
+   * refresh token is still valid, a refresh is attempted automatically.
+   * Call this manually when `useManualInitialization` is `true`.
+   */
   public init() {
     return of(this._getJwtToken())
       .pipe(
@@ -121,7 +131,14 @@ export class JwtAuthService<Token extends JwtTokenBase> {
       );
   }
 
-  public token(request: any): Observable<Token> {
+  /**
+   * Authenticates the user by posting `request` to `tokenUrl`.
+   * On success the token is persisted to storage and reactive state is updated.
+   *
+   * @param request The login request body. Use the generic parameter `TRequest`
+   *                to get full type-safety for your specific API contract.
+   */
+  public token<TRequest = object>(request: TRequest): Observable<Token> {
     return this._http.post<Token>(this._config.tokenUrl, request).pipe(
       tap(x => {
         this._setToken(x)
@@ -133,6 +150,14 @@ export class JwtAuthService<Token extends JwtTokenBase> {
     );
   }
 
+  /**
+   * Refreshes the access token using the stored refresh token.
+   * Concurrent calls are serialized with a mutex so only one HTTP request is
+   * made; other callers wait and receive the same result.
+   *
+   * The request body is built by `refreshTokenRequestFactory` (if configured)
+   * or falls back to `{ username, refreshToken }`.
+   */
   public refreshToken(): Observable<Token> {
     if (this._jwtTokenSubject.value == null || this._jwtTokenSubject.value.accessToken == null) {
       if (this._config.logLevel <= JwtAuthLogLevel.ERROR)
@@ -155,9 +180,15 @@ export class JwtAuthService<Token extends JwtTokenBase> {
                 tap(x => this._isRefreshingTokenSubject.next(true)),
                 switchMap(x => {
                   let jwtToken = this._getJwtToken();
-                  let request = new RefreshTokenRequest();
-                  request.username = jwtToken.username;
-                  request.refreshToken = jwtToken.refreshToken;
+                  let request: object;
+                  if (this._config.refreshTokenRequestFactory) {
+                    request = this._config.refreshTokenRequestFactory(jwtToken ?? new JwtTokenBase());
+                  } else {
+                    const defaultRequest = new RefreshTokenRequest();
+                    defaultRequest.username = jwtToken?.username ?? '';
+                    defaultRequest.refreshToken = jwtToken?.refreshToken ?? '';
+                    request = defaultRequest;
+                  }
                   return this._http.post<Token>(this._config.refreshUrl, request)
                     .pipe(
                       tap(x => {
@@ -171,7 +202,7 @@ export class JwtAuthService<Token extends JwtTokenBase> {
                           return this._refreshTokenSubject
                             .pipe(
                               filter(x => x != null),
-                              filter(x => !this._checkTokenIsExpired(x)),
+                              filter(x => !this._checkTokenIsExpired(x as Token)),
                               take(1)
                             );
                         } else {
@@ -183,6 +214,7 @@ export class JwtAuthService<Token extends JwtTokenBase> {
                               this._cleanToken();
                               return throwError(() => new Error("Refresh token expired"));
                             }
+                            return throwError(() => new Error("Unauthorized"));
                           } else {
                             this._cleanToken();
                             return this._handleError(err);
@@ -223,26 +255,32 @@ export class JwtAuthService<Token extends JwtTokenBase> {
       );
   }
 
+  /** Clears the stored token and emits the logged-out state. */
   public logout() {
     this._cleanToken();
   }
 
+  /** Returns `true` if `url` is one of the authentication endpoints (token or refresh). */
   public isAuthenticationUrl(url: string): boolean {
     return url == this._config.tokenUrl || url == this._config.refreshUrl;
   }
 
+  /** Returns `true` if the refresh token has passed its expiry timestamp. */
   public isRefreshTokenExpired() {
-    return new Date().getTime() > this._jwtTokenSubject.value.refreshTokenExpiresIn;
+    return new Date().getTime() > (this._jwtTokenSubject.value?.refreshTokenExpiresIn ?? 0);
   }
 
+  /** Returns `true` if the access token has passed its expiry timestamp. */
   public isTokenExpired() {
-    return this._checkTokenIsExpired(this._jwtTokenSubject.value);
+    return this._checkTokenIsExpired(this._jwtTokenSubject.value as Token);
   }
 
+  /** Overrides the token URL at runtime. */
   public setTokenUrl(url: string) {
     this._config.tokenUrl = url;
   }
 
+  /** Overrides the refresh URL at runtime. */
   public setRefreshUrl(url: string) {
     this._config.refreshUrl = url;
   }
@@ -255,6 +293,7 @@ export class JwtAuthService<Token extends JwtTokenBase> {
     this._storage.setItem(REFRESHING_KEY_STORAGE, '' + refreshing);
   }
 
+  /** Manually sets a token, persisting it to storage and updating reactive state. */
   public setToken(jwtToken: Token) {
     this._setToken(jwtToken);
   }
@@ -300,7 +339,7 @@ export class JwtAuthService<Token extends JwtTokenBase> {
 
   private _getJwtToken() {
     if (!this._isLocalStorageSupported) return undefined;
-    return <Token>JSON.parse(this._storage.getItem(TOKEN_KEY_STORAGE));
+    return <Token>JSON.parse(this._storage.getItem(TOKEN_KEY_STORAGE) ?? 'null');
   }
 
   private _deleteJwtToken() {
@@ -308,12 +347,12 @@ export class JwtAuthService<Token extends JwtTokenBase> {
   }
 
   private _checkTokenIsExpired(token: Token) {
-    return new Date().getTime() > token.expiresIn;
+    return new Date().getTime() > (token.expiresIn ?? 0);
   }
 
-  private _handleError(error) {
-    let message: string;
-    let detailedMessage: string;
+  private _handleError(error: any) {
+    let message: string | undefined;
+    let detailedMessage: string | undefined;
     if (error.error instanceof Error) {
       if (this._config.logLevel <= JwtAuthLogLevel.ERROR)
         console.error('An error occurred:', error.error.message);
@@ -327,7 +366,7 @@ export class JwtAuthService<Token extends JwtTokenBase> {
         message = error.message;
       }
     }
-    let jwtResponse = new JwtResponseError(message, detailedMessage, error.status);
+    let jwtResponse = new JwtResponseError(message ?? '', detailedMessage ?? '', error.status);
     return throwError(() => jwtResponse);
   }
 }

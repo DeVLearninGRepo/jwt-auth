@@ -412,7 +412,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## 📞 Support
 
 - 🐛 **Issues**: [GitHub Issues](https://github.com/DeVLearninGRepo/jwt-auth/issues)
-- 📧 **Contact**: [Luca Evaroni](mailto:luca.evaroni@devlearning.it)
+- 📧 **Contact**: [Luca Evaroni](mailto:info@luca.evaroni.it)
 - 📖 **Documentation**: [GitHub Repository](https://github.com/DeVLearninGRepo/jwt-auth)
 
 ## 🏷️ Keywords

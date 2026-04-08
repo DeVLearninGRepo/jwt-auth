@@ -1,6 +1,6 @@
 {
   "name": "jwt-auth-workspace",
-  "version": "20.3.6",
+  "version": "20.3.7",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
