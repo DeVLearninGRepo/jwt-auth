@@ -1,5 +1,5 @@
-import { inject } from '@angular/core';
-import { HttpErrorResponse, HttpEvent, HttpInterceptorFn, HttpRequest } from '@angular/common/http';
+import { inject, Inject, Injectable } from '@angular/core';
+import { HttpErrorResponse, HttpEvent, HttpHandler, HttpInterceptor, HttpInterceptorFn, HttpRequest } from '@angular/common/http';
 import { catchError, switchMap } from 'rxjs/operators';
 import { Observable, throwError } from 'rxjs';
 import { JwtAuthService } from './jwt-auth.service';
@@ -15,7 +15,6 @@ function applyCredentials(req: HttpRequest<any>, token?: string | null) {
 
 export const jwtAuthInterceptorFn: HttpInterceptorFn = (req, next): Observable<HttpEvent<unknown>> => {
   const config = inject(JWT_AUTH_CONFIG) as JwtAuthConfig;
-  // Nota: se il tuo JwtAuthService è generico, puoi specializzarlo su JwtTokenBase
   const jwtAuth = inject<JwtAuthService<JwtTokenBase>>(JwtAuthService as any);
 
   if (config.logLevel <= JwtAuthLogLevel.VERBOSE) {
@@ -54,3 +53,39 @@ export const jwtAuthInterceptorFn: HttpInterceptorFn = (req, next): Observable<H
     })
   );
 };
+
+@Injectable()
+export class JwtAuthInterceptor implements HttpInterceptor {
+  constructor(
+    private readonly jwtAuth: JwtAuthService<JwtTokenBase>,
+    @Inject(JWT_AUTH_CONFIG) private readonly config: JwtAuthConfig,
+  ) {}
+
+  intercept(req: HttpRequest<unknown>, next: HttpHandler): Observable<HttpEvent<unknown>> {
+    if (this.config.logLevel <= JwtAuthLogLevel.VERBOSE) {
+      console.debug('JwtAuthInterceptor', req.url);
+    }
+
+    if (this.jwtAuth.isAuthenticationUrl(req.url)) {
+      return next.handle(req);
+    }
+
+    const authedReq = applyCredentials(req, this.jwtAuth.jwtToken?.accessToken);
+
+    return next.handle(authedReq).pipe(
+      catchError((error: unknown) => {
+        if (!(error instanceof HttpErrorResponse)) {
+          return throwError(() => error);
+        }
+
+        if (error.status === 401 && this.jwtAuth.jwtToken != null && this.jwtAuth.isLoggedIn) {
+          return this.jwtAuth.refreshToken().pipe(
+            switchMap(t => next.handle(applyCredentials(req, t.accessToken)))
+          );
+        }
+
+        return throwError(() => error);
+      })
+    );
+  }
+}
